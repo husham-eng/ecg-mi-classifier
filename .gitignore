@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+.DS_Store
+*.log
+instance/
+.env
+
+# نتائج استخراج مؤقتة من tools/ (كبيرة الحجم، تُعاد توليدها من بيانات PTB-XL الخام)
+ptbxl_beats.pkl
+*.pkl
+
+# ملفات محلية لأي منصة نشر
+.pythonanywhere/

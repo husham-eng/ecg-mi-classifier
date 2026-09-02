@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تصنيف احتشاء عضلة القلب من ECG</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 780px; margin: 30px auto; padding: 0 20px; color: #222; }
+    h1 { color: #2a6fbb; }
+    .disclaimer { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+    .lead-box { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+    .lead-box h3 { margin: 0 0 8px 0; color: #444; }
+    label { display: block; margin: 6px 0 2px; font-size: 14px; }
+    input[type=file], input[type=number] { width: 100%; padding: 6px; box-sizing: border-box; }
+    button { background: #2a6fbb; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+    button:hover { background: #1d5a9e; }
+    #result { margin-top: 24px; padding: 16px; border-radius: 8px; background: #f5f5f5; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+    .hint { color: #777; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>تصنيف أولي لنوع احتشاء عضلة القلب من ECG</h1>
+  <div class="disclaimer">
+    ⚠️ هذا نموذج بحثي أولي وليس جهازاً طبياً معتمداً. النتيجة للمساعدة على تحديد الأولوية فقط،
+    ويجب دائماً تأكيدها عبر تقييم طبي مختص.
+  </div>
+
+  <form id="ecgForm">
+  <div class="lead-box" style="background:#f0f7ff;">
+    <h3>Lead II (اختياري — لتحسين دقة المحازاة فقط)</h3>
+    <p class="hint">لو توفر لديك تخطيط Lead II الكامل (حتى لو لم يكن مطلوباً بالتصنيف)، ارفعه هنا:
+       يُستخدَم فقط لتحديد مواقع نبضات القلب بدقة أعلى عبر كل الأقطاب المرفوعة أعلاه —
+       تجربة فعلية أظهرت تحسناً ملموساً بالدقة (خصوصاً لقطب aVR) عند توفره.</p>
+    <label>ملف إشارة Lead II (CSV/TXT فقط):</label>
+    <input type="file" name="file_II" accept=".csv,.txt">
+    <label>معدل العينات Hz:</label>
+    <input type="number" name="fs_II" value="500">
+  </div>
+
+  <p>ارفع ملف إشارة (CSV/TXT، عمود واحد من الأرقام) أو صورة مخطط (JPG/PNG) لقطب واحد أو أكثر من الأقطاب المدعومة.
+     كل ما زاد عدد الأقطاب المرفوعة، كل ما كان القرار النهائي أدق (يُدمج تلقائياً بتصويت مرجّح).</p>
+
+    {% for lead in leads %}
+    <div class="lead-box">
+      <h3>قطب {{ lead }}</h3>
+      <label>ملف (اختياري):</label>
+      <input type="file" name="file_{{ lead }}" accept=".csv,.txt,.png,.jpg,.jpeg">
+      <label>معدل العينات Hz (فقط لملفات CSV/TXT):</label>
+      <input type="number" name="fs_{{ lead }}" value="500">
+      <p class="hint">للصور: يُكتشف معدل العينات تلقائياً من تحليل الصورة.</p>
+    </div>
+    {% endfor %}
+    <button type="submit">تصنيف</button>
+  </form>
+
+  <div id="result" style="display:none;"></div>
+
+  <script>
+    document.getElementById('ecgForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const resultDiv = document.getElementById('result');
+      resultDiv.style.display = 'block';
+      resultDiv.textContent = 'جاري المعالجة...';
+
+      const formData = new FormData(e.target);
+      try {
+        const res = await fetch('/classify', { method: 'POST', body: formData });
+        const data = await res.json();
+        resultDiv.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        resultDiv.textContent = 'خطأ: ' + err;
+      }
+    });
+  </script>
+</body>
+</html>
