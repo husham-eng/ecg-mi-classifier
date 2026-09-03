@@ -19,6 +19,7 @@ import numpy as np
 from flask import Flask, request, render_template, jsonify
 
 from ecg_pipeline import classify_patient, classify_from_image, SUPPORTED_LEADS
+from translations import get_translation, DEFAULT_LANG
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20MB حد أقصى لكل طلب
@@ -42,7 +43,9 @@ def load_signal_file(file_storage) -> np.ndarray:
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", leads=SUPPORTED_LEADS)
+    lang = request.args.get("lang", DEFAULT_LANG)
+    t = get_translation(lang)
+    return render_template("index.html", leads=SUPPORTED_LEADS, t=t)
 
 
 @app.route("/classify", methods=["POST"])

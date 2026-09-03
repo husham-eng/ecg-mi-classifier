@@ -1,13 +1,22 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ t.lang_code }}" dir="{{ t.dir }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تصنيف احتشاء عضلة القلب من ECG</title>
+  <title>{{ t.page_title }}</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 780px; margin: 30px auto; padding: 0 20px; color: #222; }
+    body { font-family: Arial, sans-serif; max-width: 1100px; margin: 30px auto; padding: 0 20px; color: #222; }
     h1 { color: #2a6fbb; }
-    .disclaimer { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .lang-switcher { font-size: 14px; }
+    .lang-switcher a { margin: 0 4px; color: #2a6fbb; text-decoration: none; padding: 4px 8px; border-radius: 4px; }
+    .lang-switcher a.active { background: #2a6fbb; color: white; }
+    .disclaimer { background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+    details.howto { background: #eef6ff; border: 1px solid #bcdcff; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+    details.howto summary { cursor: pointer; font-weight: bold; color: #1d5a9e; font-size: 15px; }
+    details.howto ul, details.howto ol { margin: 6px 0; padding-inline-start: 22px; }
+    details.howto p { margin: 8px 0; font-size: 14px; line-height: 1.6; }
+    .intro-text { font-size: 14px; line-height: 1.6; }
     .lead-box { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
     .lead-box h3 { margin: 0 0 8px 0; color: #444; }
     label { display: block; margin: 6px 0 2px; font-size: 14px; }
@@ -16,51 +25,74 @@
     button:hover { background: #1d5a9e; }
     #result { margin-top: 24px; padding: 16px; border-radius: 8px; background: #f5f5f5; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
     .hint { color: #777; font-size: 12px; }
+
+    /* تخطيط أفقي للأقطاب الأربعة على الشاشات الواسعة، ويتراصّ عمودياً تلقائياً على الجوال */
+    .leads-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .leads-grid .lead-box { margin-bottom: 0; }
   </style>
 </head>
 <body>
-  <h1>تصنيف أولي لنوع احتشاء عضلة القلب من ECG</h1>
-  <div class="disclaimer">
-    ⚠️ هذا نموذج بحثي أولي وليس جهازاً طبياً معتمداً. النتيجة للمساعدة على تحديد الأولوية فقط،
-    ويجب دائماً تأكيدها عبر تقييم طبي مختص.
+  <div class="top-bar">
+    <h1>{{ t.heading }}</h1>
+    <div class="lang-switcher">
+      {{ t.lang_selector_label }}
+      <a href="?lang=ar" class="{{ 'active' if t.lang_code == 'ar' else '' }}">عربي</a>
+      <a href="?lang=en" class="{{ 'active' if t.lang_code == 'en' else '' }}">English</a>
+      <a href="?lang=ru" class="{{ 'active' if t.lang_code == 'ru' else '' }}">Русский</a>
+    </div>
   </div>
+
+  <div class="disclaimer">{{ t.disclaimer }}</div>
+
+  <details class="howto">
+    <summary>{{ t.how_to_use_title }}</summary>
+    {{ t.how_to_use_html | safe }}
+  </details>
 
   <form id="ecgForm">
-  <div class="lead-box" style="background:#f0f7ff;">
-    <h3>Lead II (اختياري — لتحسين دقة المحازاة فقط)</h3>
-    <p class="hint">لو توفر لديك تخطيط Lead II الكامل (حتى لو لم يكن مطلوباً بالتصنيف)، ارفعه هنا:
-       يُستخدَم فقط لتحديد مواقع نبضات القلب بدقة أعلى عبر كل الأقطاب المرفوعة أعلاه —
-       تجربة فعلية أظهرت تحسناً ملموساً بالدقة (خصوصاً لقطب aVR) عند توفره.</p>
-    <label>ملف إشارة Lead II (CSV/TXT فقط):</label>
-    <input type="file" name="file_II" accept=".csv,.txt">
-    <label>معدل العينات Hz:</label>
-    <input type="number" name="fs_II" value="500">
-  </div>
-
-  <p>ارفع ملف إشارة (CSV/TXT، عمود واحد من الأرقام) أو صورة مخطط (JPG/PNG) لقطب واحد أو أكثر من الأقطاب المدعومة.
-     كل ما زاد عدد الأقطاب المرفوعة، كل ما كان القرار النهائي أدق (يُدمج تلقائياً بتصويت مرجّح).</p>
-
-    {% for lead in leads %}
-    <div class="lead-box">
-      <h3>قطب {{ lead }}</h3>
-      <label>ملف (اختياري):</label>
-      <input type="file" name="file_{{ lead }}" accept=".csv,.txt,.png,.jpg,.jpeg">
-      <label>معدل العينات Hz (فقط لملفات CSV/TXT):</label>
-      <input type="number" name="fs_{{ lead }}" value="500">
-      <p class="hint">للصور: يُكتشف معدل العينات تلقائياً من تحليل الصورة.</p>
+    <div class="lead-box" style="background:#f0f7ff;">
+      <h3>{{ t.lead_ii_title }}</h3>
+      <p class="hint">{{ t.lead_ii_desc }}</p>
+      <label>{{ t.lead_ii_file_label }}</label>
+      <input type="file" name="file_II" accept=".csv,.txt">
+      <label>{{ t.fs_label }}</label>
+      <input type="number" name="fs_II" value="500">
     </div>
-    {% endfor %}
-    <button type="submit">تصنيف</button>
+
+    <p class="intro-text">{{ t.intro_text | safe }}</p>
+
+    <div class="leads-grid">
+      {% for lead in leads %}
+      <div class="lead-box">
+        <h3>{{ t.lead_box_title.format(lead=lead) }}</h3>
+        <label>{{ t.file_label }}</label>
+        <input type="file" name="file_{{ lead }}" accept=".csv,.txt,image/png,image/jpeg,image/jpg" capture="environment">
+        <label>{{ t.fs_label }}</label>
+        <input type="number" name="fs_{{ lead }}" value="500">
+        <p class="hint">{{ t.fs_hint }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <button type="submit">{{ t.submit_button }}</button>
   </form>
 
   <div id="result" style="display:none;"></div>
 
   <script>
+    const PROCESSING_TEXT = {{ t.processing | tojson }};
+    const ERROR_PREFIX = {{ t.error_prefix | tojson }};
+
     document.getElementById('ecgForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const resultDiv = document.getElementById('result');
       resultDiv.style.display = 'block';
-      resultDiv.textContent = 'جاري المعالجة...';
+      resultDiv.textContent = PROCESSING_TEXT;
 
       const formData = new FormData(e.target);
       try {
@@ -68,7 +100,7 @@
         const data = await res.json();
         resultDiv.textContent = JSON.stringify(data, null, 2);
       } catch (err) {
-        resultDiv.textContent = 'خطأ: ' + err;
+        resultDiv.textContent = ERROR_PREFIX + err;
       }
     });
   </script>
