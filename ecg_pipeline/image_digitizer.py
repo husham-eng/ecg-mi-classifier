@@ -164,6 +164,8 @@ def calibrate_signal(pixel_signal: np.ndarray, image_path: str,
     if auto_correct_via_heart_rate:
         from scipy.signal import find_peaks
         centered = pixel_signal - np.median(pixel_signal)
+        TYPICAL_RESTING_HR = 75.0  # نقطة مرجعية لاختيار أقرب تصحيح، لا "أول معقول فقط"
+        best_candidate, best_distance = 1.0, float("inf")
         for candidate in [1, 2, 5, 10]:
             test_sec_per_px = seconds_per_pixel * candidate
             test_fs_equiv = 1.0 / test_sec_per_px
@@ -174,8 +176,15 @@ def calibrate_signal(pixel_signal: np.ndarray, image_path: str,
                 rr = np.diff(peaks) * test_sec_per_px
                 hr = 60 / rr.mean()
                 if 40 <= hr <= 180:
-                    correction = candidate
-                    break
+                    # لا نتوقف عند أول عامل "معقول تقنياً" (قد يكون هذا خطأً
+                    # صامتاً كما ثبت عملياً: عامل=1 أعطى 157.5 نبضة/دقيقة وهو
+                    # "معقول" حسب المدى الواسع لكنه غير واقعي مقارنة بعامل
+                    # أدق أعطى 78.8 نبضة/دقيقة). نقيّم كل العوامل ونختار
+                    # الأقرب لمعدل استراحة نموذجي.
+                    distance = abs(hr - TYPICAL_RESTING_HR)
+                    if distance < best_distance:
+                        best_candidate, best_distance = candidate, distance
+        correction = best_candidate
 
     seconds_per_pixel *= correction
     mv_per_pixel *= correction  # نفترض نفس عامل التصحيح ينطبق على المحورين (شبكة مربعة عادة)

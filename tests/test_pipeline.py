@@ -12,7 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 import pytest
 
+from pathlib import Path
 from ecg_pipeline import classify_lead_signal, classify_patient, combine_lead_probabilities, SUPPORTED_LEADS
+from ecg_pipeline.panel_detector import detect_panel_leads, LEFT_COLUMN_LEADS, RIGHT_COLUMN_LEADS
 
 
 def synthetic_ecg(fs=500, duration_s=6, amp=1.0, seed=0):
@@ -88,6 +90,24 @@ def test_combine_lead_probabilities_used_by_multiple_sources():
     assert set(result["lead_weights_used"].keys()) == set(SUPPORTED_LEADS)
 
 
+def test_panel_detector_finds_all_12_leads():
+    """
+    يتأكد أن وحدة اكتشاف اللوحة الكاملة (panel_detector) تكتشف كل الأقطاب
+    الـ12 بأبعاد قص منطقية (لا صفرية) على صورة تركيبية بنفس بنية '6 صفوف
+    × عمودين زمنيين' — لا يشترط دقة OCR الكاملة (موثّقة كمصدر ثانوي غير
+    كامل الموثوقية)، فقط سلامة الاكتشاف الهيكلي نفسه.
+    """
+    fixture = Path(__file__).parent / "fixtures" / "synthetic_panel_6x2.png"
+    result = detect_panel_leads(str(fixture))
+
+    expected_leads = set(LEFT_COLUMN_LEADS) | set(RIGHT_COLUMN_LEADS)
+    assert set(result.keys()) == expected_leads
+
+    for lead, info in result.items():
+        assert info["crop"].size > 0, f"قص فارغ لقطب {lead}"
+        assert info["confidence"] in {"confirmed", "weak", "not_found"}
+
+
 if __name__ == "__main__":
     for lead in SUPPORTED_LEADS:
         test_model_loads_and_predicts(lead)
@@ -95,4 +115,5 @@ if __name__ == "__main__":
         test_explicit_beat_index_still_works(lead)
     test_classify_patient_weighted_fusion()
     test_combine_lead_probabilities_used_by_multiple_sources()
+    test_panel_detector_finds_all_12_leads()
     print("✅ كل الاختبارات نجحت")

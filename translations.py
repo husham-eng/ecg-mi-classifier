@@ -58,6 +58,22 @@ TRANSLATIONS = {
         "processing": "جاري المعالجة...",
         "error_prefix": "خطأ: ",
         "lang_selector_label": "اللغة:",
+        "panel_section_title": "🚀 الطريقة السريعة: رفع صورة اللوحة الكاملة (12 قطباً)",
+        "panel_section_desc": "صوّر أو ارفع صورة تخطيط ECG الكاملة (كل الأقطاب الـ12 بلوحة واحدة)، "
+                               "والنظام يكتشف ويقصّ الأقطاب المطلوبة تلقائياً. "
+                               "<strong>هذي ميزة تجريبية</strong> — تأكّد دائماً من صحة الأقطاب "
+                               "المكتشفة بالمعاينة أدناه قبل التصنيف.",
+        "panel_file_label": "صورة اللوحة الكاملة:",
+        "panel_detect_button": "اكتشاف الأقطاب",
+        "panel_detecting": "جاري تحليل الصورة...",
+        "panel_detect_error_prefix": "تعذّر الاكتشاف: ",
+        "confidence_confirmed": "✅ مؤكَّد (قراءة نصية واضحة)",
+        "confidence_weak": "⚠️ غير مؤكَّد — تحقق من الصورة",
+        "confidence_not_found": "⚠️ لم تُقرأ التسمية — تحقق من الصورة",
+        "panel_confirm_button": "تأكيد الأقطاب وتصنيف",
+        "panel_review_note": "راجع كل قطب مكتشَف أدناه. لو أي واحد يبدو خاطئاً، تجاهل هذا القسم "
+                              "واستخدم الرفع اليدوي بالأسفل بدلاً منه لهذا القطب تحديداً.",
+        "manual_section_divider": "— أو: الطريقة اليدوية (رفع كل قطب على حدة) —",
     },
     "en": {
         "dir": "ltr",
@@ -119,6 +135,24 @@ TRANSLATIONS = {
         "processing": "Processing...",
         "error_prefix": "Error: ",
         "lang_selector_label": "Language:",
+        "panel_section_title": "🚀 Fast method: upload the full 12-lead panel image",
+        "panel_section_desc": "Photograph or upload the complete ECG panel (all 12 leads in one "
+                               "sheet), and the system will automatically detect and crop the "
+                               "leads it needs. <strong>This is an experimental feature</strong> "
+                               "— always verify the detected leads in the preview below before "
+                               "classifying.",
+        "panel_file_label": "Full panel image:",
+        "panel_detect_button": "Detect leads",
+        "panel_detecting": "Analyzing image...",
+        "panel_detect_error_prefix": "Detection failed: ",
+        "confidence_confirmed": "✅ Confirmed (clear text reading)",
+        "confidence_weak": "⚠️ Not confirmed — please verify",
+        "confidence_not_found": "⚠️ Label not readable — please verify",
+        "panel_confirm_button": "Confirm leads and classify",
+        "panel_review_note": "Review each detected lead below. If any looks wrong, ignore this "
+                              "section and use the manual upload below instead for that "
+                              "specific lead.",
+        "manual_section_divider": "— or: Manual method (upload each lead separately) —",
     },
     "ru": {
         "dir": "ltr",
@@ -184,6 +218,24 @@ TRANSLATIONS = {
         "processing": "Обработка...",
         "error_prefix": "Ошибка: ",
         "lang_selector_label": "Язык:",
+        "panel_section_title": "🚀 Быстрый способ: загрузите изображение полной панели (12 отведений)",
+        "panel_section_desc": "Сфотографируйте или загрузите полное изображение ЭКГ (все 12 "
+                               "отведений на одном листе), и система автоматически определит и "
+                               "вырежет нужные отведения. <strong>Это экспериментальная "
+                               "функция</strong> — всегда проверяйте обнаруженные отведения в "
+                               "предпросмотре ниже перед классификацией.",
+        "panel_file_label": "Изображение полной панели:",
+        "panel_detect_button": "Определить отведения",
+        "panel_detecting": "Анализ изображения...",
+        "panel_detect_error_prefix": "Не удалось определить: ",
+        "confidence_confirmed": "✅ Подтверждено (чёткое чтение текста)",
+        "confidence_weak": "⚠️ Не подтверждено — проверьте вручную",
+        "confidence_not_found": "⚠️ Метка не читается — проверьте вручную",
+        "panel_confirm_button": "Подтвердить отведения и классифицировать",
+        "panel_review_note": "Проверьте каждое обнаруженное отведение ниже. Если что-то выглядит "
+                              "неверно, проигнорируйте этот раздел и используйте ручную загрузку "
+                              "ниже для этого конкретного отведения.",
+        "manual_section_divider": "— или: Ручной способ (загрузка каждого отведения отдельно) —",
     },
 }
 

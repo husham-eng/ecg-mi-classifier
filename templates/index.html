@@ -23,10 +23,10 @@
     input[type=file], input[type=number] { width: 100%; padding: 6px; box-sizing: border-box; }
     button { background: #2a6fbb; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
     button:hover { background: #1d5a9e; }
+    button:disabled { background: #999; cursor: not-allowed; }
     #result { margin-top: 24px; padding: 16px; border-radius: 8px; background: #f5f5f5; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
     .hint { color: #777; font-size: 12px; }
 
-    /* تخطيط أفقي للأقطاب الأربعة على الشاشات الواسعة، ويتراصّ عمودياً تلقائياً على الجوال */
     .leads-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -34,6 +34,25 @@
       margin-bottom: 12px;
     }
     .leads-grid .lead-box { margin-bottom: 0; }
+
+    .panel-section { background: #f0fff4; border: 2px solid #34a853; border-radius: 10px; padding: 18px; margin-bottom: 24px; }
+    .panel-section h2 { margin: 0 0 8px 0; color: #1e7e34; font-size: 18px; }
+    .panel-section p { font-size: 14px; line-height: 1.6; }
+
+    .detected-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 14px 0;
+    }
+    .detected-card { border: 1px solid #ccc; border-radius: 8px; padding: 8px; background: white; text-align: center; }
+    .detected-card img { max-width: 100%; border: 1px solid #eee; border-radius: 4px; }
+    .detected-card h4 { margin: 6px 0 2px 0; }
+    .confidence-badge { font-size: 12px; display: block; margin-top: 4px; }
+    .confidence-confirmed { color: #1e7e34; }
+    .confidence-weak, .confidence-not_found { color: #b8860b; }
+
+    .section-divider { text-align: center; color: #888; font-size: 13px; margin: 26px 0; }
   </style>
 </head>
 <body>
@@ -54,6 +73,27 @@
     {{ t.how_to_use_html | safe }}
   </details>
 
+  <!-- ============== القسم الجديد: رفع اللوحة الكاملة تلقائياً ============== -->
+  <div class="panel-section">
+    <h2>{{ t.panel_section_title }}</h2>
+    <p>{{ t.panel_section_desc | safe }}</p>
+
+    <label>{{ t.panel_file_label }}</label>
+    <input type="file" id="panelImageInput" accept="image/png,image/jpeg,image/jpg" capture="environment">
+    <button type="button" id="detectPanelBtn">{{ t.panel_detect_button }}</button>
+
+    <div id="panelDetectStatus" style="display:none; margin-top:10px; font-size:14px;"></div>
+
+    <div id="detectedLeadsContainer" style="display:none;">
+      <p class="hint">{{ t.panel_review_note }}</p>
+      <div class="detected-grid" id="detectedGrid"></div>
+      <button type="button" id="confirmPanelBtn">{{ t.panel_confirm_button }}</button>
+    </div>
+  </div>
+
+  <div class="section-divider">{{ t.manual_section_divider }}</div>
+
+  <!-- ============== النموذج اليدوي الحالي (لكل قطب على حدة) ============== -->
   <form id="ecgForm">
     <div class="lead-box" style="background:#f0f7ff;">
       <h3>{{ t.lead_ii_title }}</h3>
@@ -87,6 +127,88 @@
   <script>
     const PROCESSING_TEXT = {{ t.processing | tojson }};
     const ERROR_PREFIX = {{ t.error_prefix | tojson }};
+    const PANEL_DETECTING_TEXT = {{ t.panel_detecting | tojson }};
+    const PANEL_ERROR_PREFIX = {{ t.panel_detect_error_prefix | tojson }};
+    const CONFIDENCE_LABELS = {
+      confirmed: {{ t.confidence_confirmed | tojson }},
+      weak: {{ t.confidence_weak | tojson }},
+      not_found: {{ t.confidence_not_found | tojson }},
+    };
+
+    let detectedLeadsData = null;  // {LeadI: {image_b64, confidence}, aVR: {...}, ...}
+
+    document.getElementById('detectPanelBtn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('panelImageInput');
+      const statusDiv = document.getElementById('panelDetectStatus');
+      const detectedContainer = document.getElementById('detectedLeadsContainer');
+
+      if (!fileInput.files.length) return;
+
+      statusDiv.style.display = 'block';
+      statusDiv.textContent = PANEL_DETECTING_TEXT;
+      detectedContainer.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('panel_image', fileInput.files[0]);
+
+      try {
+        const res = await fetch('/detect_panel', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+          statusDiv.textContent = PANEL_ERROR_PREFIX + data.error;
+          return;
+        }
+
+        detectedLeadsData = data.leads;
+        statusDiv.style.display = 'none';
+
+        const grid = document.getElementById('detectedGrid');
+        grid.innerHTML = '';
+        for (const [lead, info] of Object.entries(detectedLeadsData)) {
+          const card = document.createElement('div');
+          card.className = 'detected-card';
+          const confClass = 'confidence-' + info.confidence;
+          card.innerHTML = `
+            <h4>${lead}</h4>
+            <img src="data:image/png;base64,${info.image_b64}" alt="${lead}">
+            <span class="confidence-badge ${confClass}">${CONFIDENCE_LABELS[info.confidence] || info.confidence}</span>
+          `;
+          grid.appendChild(card);
+        }
+        detectedContainer.style.display = 'block';
+      } catch (err) {
+        statusDiv.textContent = PANEL_ERROR_PREFIX + err;
+      }
+    });
+
+    function base64ToBlob(b64) {
+      const byteChars = atob(b64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      return new Blob([new Uint8Array(byteNumbers)], { type: 'image/png' });
+    }
+
+    document.getElementById('confirmPanelBtn').addEventListener('click', async () => {
+      if (!detectedLeadsData) return;
+      const resultDiv = document.getElementById('result');
+      resultDiv.style.display = 'block';
+      resultDiv.textContent = PROCESSING_TEXT;
+
+      const formData = new FormData();
+      for (const [lead, info] of Object.entries(detectedLeadsData)) {
+        const blob = base64ToBlob(info.image_b64);
+        formData.append(`file_${lead}`, blob, `${lead}.png`);
+      }
+
+      try {
+        const res = await fetch('/classify', { method: 'POST', body: formData });
+        const data = await res.json();
+        resultDiv.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        resultDiv.textContent = ERROR_PREFIX + err;
+      }
+    });
 
     document.getElementById('ecgForm').addEventListener('submit', async (e) => {
       e.preventDefault();

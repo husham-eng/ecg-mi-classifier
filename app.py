@@ -14,12 +14,16 @@ app.py — تطبيق الويب الرئيسي
 """
 
 import os
+import io
+import base64
 import tempfile
+import cv2
 import numpy as np
 from flask import Flask, request, render_template, jsonify
 
 from ecg_pipeline import (classify_patient, classify_from_image, classify_lead_signal,
                            combine_lead_probabilities, SUPPORTED_LEADS)
+from ecg_pipeline.panel_detector import detect_panel_leads
 from translations import get_translation, DEFAULT_LANG
 
 app = Flask(__name__)
@@ -47,6 +51,56 @@ def index():
     lang = request.args.get("lang", DEFAULT_LANG)
     t = get_translation(lang)
     return render_template("index.html", leads=SUPPORTED_LEADS, t=t)
+
+
+@app.route("/detect_panel", methods=["POST"])
+def detect_panel():
+    """
+    يستقبل صورة لوحة ECG كاملة (12 قطباً)، يكتشف ويقصّ الأقطاب الأربعة
+    المدعومة تلقائياً (LeadI, aVR, V2, V6)، ويُرجعها كصور مصغّرة (base64)
+    مع مستوى ثقة لكل واحدة — لعرضها بخطوة تأكيد بصرية قبل التصنيف
+    النهائي (لا يُصنَّف شيء هنا، فقط اكتشاف وتقطيع).
+    """
+    file = request.files.get("panel_image")
+    if not file or file.filename == "":
+        return jsonify({"error": "لم يتم رفع أي صورة."}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in IMAGE_EXTENSIONS:
+        return jsonify({"error": f"صيغة ملف غير مدعومة لصورة اللوحة الكاملة: {ext}"}), 400
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        file.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        detected = detect_panel_leads(tmp_path)
+    except Exception as e:
+        return jsonify({"error": f"تعذّر اكتشاف اللوحة — تحقق من أنها صورة تخطيط قياسية واضحة. ({e})"}), 400
+    finally:
+        os.unlink(tmp_path)
+
+    # نحتاج فقط الأقطاب الأربعة المدعومة فعلياً بالتطبيق
+    panel_to_project = {"I": "LeadI", "aVR": "aVR", "V2": "V2", "V6": "V6"}
+    leads_out = {}
+    for panel_name, project_name in panel_to_project.items():
+        info = detected.get(panel_name)
+        if info is None:
+            continue
+        crop = info["crop"]
+        ok, buf = cv2.imencode(".png", crop)
+        if not ok:
+            continue
+        b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+        leads_out[project_name] = {
+            "image_b64": b64,
+            "confidence": info["confidence"],  # confirmed / weak / not_found
+        }
+
+    if not leads_out:
+        return jsonify({"error": "تعذّر اكتشاف أي قطب مدعوم بهذي الصورة."}), 400
+
+    return jsonify({"leads": leads_out})
 
 
 @app.route("/classify", methods=["POST"])
