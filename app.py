@@ -18,7 +18,8 @@ import tempfile
 import numpy as np
 from flask import Flask, request, render_template, jsonify
 
-from ecg_pipeline import classify_patient, classify_from_image, SUPPORTED_LEADS
+from ecg_pipeline import (classify_patient, classify_from_image, classify_lead_signal,
+                           combine_lead_probabilities, SUPPORTED_LEADS)
 from translations import get_translation, DEFAULT_LANG
 
 app = Flask(__name__)
@@ -50,12 +51,12 @@ def index():
 
 @app.route("/classify", methods=["POST"])
 def classify():
-    signals_by_lead = {}
-    image_results = {}
+    per_lead_results = {}
     errors = {}
 
     # قطب Lead II اختياري: لو رُفع، يُستخدم فقط كمرجع محازاة موحّد لمواقع R
-    # عبر كل الأقطاب المُدخَلة (لا يُصنَّف بنفسه، النماذج الحالية لا تغطيه).
+    # عبر الأقطاب المُدخَلة كإشارات رقمية (لا يُصنَّف بنفسه، ولا يُطبَّق
+    # حالياً على مسار الصور — كل صورة لها توقيتها الخاصة من تحليلها).
     reference_lead_signal = None
     ref_file = request.files.get("file_II")
     if ref_file and ref_file.filename != "":
@@ -70,6 +71,13 @@ def classify():
         else:
             errors["II"] = "Lead II المرجعي مدعوم كملف إشارة رقمية (CSV/TXT) فقط حالياً."
 
+    external_r_locs = None
+    if reference_lead_signal is not None:
+        from ecg_pipeline.preprocessing import denoise, remove_baseline, detect_r_peaks
+        ref_raw, ref_fs = reference_lead_signal
+        ref_clean = remove_baseline(denoise(ref_raw, ref_fs), degree=6)
+        external_r_locs = detect_r_peaks(ref_clean, ref_fs, polarity_robust=True)
+
     for lead in SUPPORTED_LEADS:
         file = request.files.get(f"file_{lead}")
         if not file or file.filename == "":
@@ -83,12 +91,12 @@ def classify():
                 tmp_path = tmp.name
             try:
                 result = classify_from_image(tmp_path, lead)
-                if "error" in result:
-                    errors[lead] = result["error"]
-                else:
-                    image_results[lead] = result
             finally:
                 os.unlink(tmp_path)
+            if "error" in result:
+                errors[lead] = result["error"]
+            else:
+                per_lead_results[lead] = result
 
         elif ext in SIGNAL_EXTENSIONS:
             fs = float(request.form.get(f"fs_{lead}", 500))
@@ -96,26 +104,23 @@ def classify():
             if len(raw) < fs:  # أقل من ثانية واحدة من البيانات
                 errors[lead] = "الإشارة قصيرة جداً (أقل من ثانية واحدة)."
                 continue
-            signals_by_lead[lead] = (raw, fs)
+            result = classify_lead_signal(raw, fs, lead, external_r_locs=external_r_locs)
+            if "error" in result:
+                errors[lead] = result["error"]
+            else:
+                per_lead_results[lead] = result
         else:
             errors[lead] = f"صيغة ملف غير مدعومة: {ext}"
 
-    if not signals_by_lead and not image_results:
+    if not per_lead_results:
         return jsonify({"error": "لم يتم رفع أي قطب صالح.", "details": errors}), 400
 
-    # الحالة الشائعة: قطب واحد فقط كصورة — نرجع نتيجته مباشرة
-    if image_results and not signals_by_lead and len(image_results) == 1:
-        lead, result = next(iter(image_results.items()))
-        result["errors"] = errors
-        return jsonify(result)
-
-    # خلاف ذلك: ندمج كل الأقطاب المتوفرة كإشارات (الصور تُحوَّل مسبقاً)
-    combined_signals = dict(signals_by_lead)
-    result = classify_patient(combined_signals, reference_lead_signal=reference_lead_signal) if combined_signals else {
-        "error": "الدمج متعدد الأقطاب متاح حالياً لملفات الإشارة الرقمية فقط في هذا الإصدار."
-    }
-    if image_results:
-        result["image_leads_processed_separately"] = image_results
+    # دمج فعلي لكل الأقطاب المتوفرة (صور و/أو إشارات معاً) بتصويت مرجّح واحد،
+    # بغض النظر عن نوع المصدر لكل قطب — هذا يصلح الفجوة التي كانت تمنع
+    # دمج الصور المتعددة سابقاً (كانت تُرجع خطأً بدل قرار نهائي).
+    result = combine_lead_probabilities(per_lead_results)
+    if "error" not in result:
+        result["reference_lead_alignment_used"] = reference_lead_signal is not None
     result["errors"] = errors
     return jsonify(result)
 

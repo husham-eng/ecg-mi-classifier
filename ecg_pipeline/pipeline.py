@@ -89,47 +89,28 @@ def classify_lead_signal(raw_signal: np.ndarray, fs: float, lead: str,
     }
 
 
-def classify_patient(signals_by_lead: dict[str, tuple[np.ndarray, float]],
-                      lead_weights: dict[str, float] | None = None,
-                      reference_lead_signal: tuple[np.ndarray, float] | None = None) -> dict:
+def combine_lead_probabilities(per_lead_results: dict[str, dict],
+                                lead_weights: dict[str, float] | None = None) -> dict:
     """
-    نقطة الدخول الرئيسية: تأخذ قاموس {اسم القطب: (إشارة خام، معدل العينات)}
-    لأي مجموعة فرعية من الأقطاب المدعومة (LeadI, aVR, V2, V6)، وتُرجع
-    القرار النهائي المدمج بتصويت مرجّح فعلي بين الأقطاب.
+    يدمج نتائج أي مجموعة من الأقطاب (سواء أتت من classify_lead_signal أو
+    classify_from_image أو مزيج من الاثنين) بتصويت مرجّح فعلي، ويُرجع
+    القرار النهائي. هذي الدالة العامة المشتركة التي يعتمد عليها كل من
+    classify_patient (للإشارات) وapp.py (لدمج الصور المتعددة، الذي كان
+    غير مُطبَّق سابقاً — راجع ملاحظة إصلاح الجلسة أدناه).
 
-    reference_lead_signal: اختياري — (إشارة Lead II الخام، معدل عيّناتها)
-    إن توفّرت لدى المستخدم (مثلاً رفع تخطيط كامل 12 قطباً رغم أن النموذج
-    يستخدم 4 منها فقط). تُستخدم فقط لاكتشاف مواقع R موحّدة تُطبَّق على
-    كل الأقطاب المُدخَلة، بدل اكتشاف كل قطب مواقعه بمفرده — يحسّن الدقة
-    بشكل ملموس خصوصاً لقطب aVR (راجع توثيق classify_lead_signal). يُشترط
-    أن تكون إشارة Lead II بنفس معدل عينات وطول أقطاب المريض المُدخَلة
-    (نفس جلسة التسجيل).
-
-    lead_weights: قاموس اختياري لتخصيص أوزان الأقطاب (افتراضياً
-    DEFAULT_LEAD_WEIGHTS المبنية على Macro-F1 الموثّق لكل قطب).
+    per_lead_results: قاموس {اسم القطب: نتيجة classify_lead_signal/
+    classify_from_image} — أي نتيجة فيها مفتاح "probabilities" صالحة،
+    وأي نتيجة فيها "error" تُستبعد من الدمج لكنها تبقى بالنتيجة النهائية
+    ضمن per_lead للشفافية.
     """
     weights = dict(DEFAULT_LEAD_WEIGHTS)
     if lead_weights:
         weights.update(lead_weights)
 
-    external_r_locs = None
-    if reference_lead_signal is not None:
-        ref_raw, ref_fs = reference_lead_signal
-        ref_clean = remove_baseline(denoise(ref_raw, ref_fs), degree=6)
-        external_r_locs = detect_r_peaks(ref_clean, ref_fs, polarity_robust=True)
-
-    per_lead_results = {}
     all_classes = set()
-
-    for lead, (raw, fs) in signals_by_lead.items():
-        if lead not in SUPPORTED_LEADS:
-            continue
-        result = classify_lead_signal(raw, fs, lead, external_r_locs=external_r_locs)
-        if "error" in result:
-            per_lead_results[lead] = result
-            continue
-        per_lead_results[lead] = result
-        all_classes.update(result["probabilities"].keys())
+    for result in per_lead_results.values():
+        if "error" not in result:
+            all_classes.update(result["probabilities"].keys())
 
     if not per_lead_results:
         return {"error": "لا يوجد قطب مدعوم ضمن المدخلات (المدعوم حالياً: Lead I, aVR, V2, V6)."}
@@ -162,12 +143,49 @@ def classify_patient(signals_by_lead: dict[str, tuple[np.ndarray, float]],
         "per_lead": per_lead_results,
         "n_leads_used": n_valid,
         "lead_weights_used": {k: round(v, 3) for k, v in weights_used.items()},
-        "reference_lead_alignment_used": reference_lead_signal is not None,
         "disclaimer": (
             "هذا تصنيف أوّلي آلي بغرض المساعدة على تحديد الأولوية، وليس تشخيصاً طبياً نهائياً. "
             "يجب دائماً تأكيد النتيجة عبر تقييم طبي مختص."
         ),
     }
+
+
+def classify_patient(signals_by_lead: dict[str, tuple[np.ndarray, float]],
+                      lead_weights: dict[str, float] | None = None,
+                      reference_lead_signal: tuple[np.ndarray, float] | None = None) -> dict:
+    """
+    نقطة الدخول الرئيسية لإشارات رقمية (CSV/TXT): تأخذ قاموس {اسم القطب:
+    (إشارة خام، معدل العينات)} لأي مجموعة فرعية من الأقطاب المدعومة
+    (LeadI, aVR, V2, V6)، وتُرجع القرار النهائي المدمج بتصويت مرجّح فعلي
+    بين الأقطاب (عبر combine_lead_probabilities).
+
+    reference_lead_signal: اختياري — (إشارة Lead II الخام، معدل عيّناتها)
+    إن توفّرت لدى المستخدم (مثلاً رفع تخطيط كامل 12 قطباً رغم أن النموذج
+    يستخدم 4 منها فقط). تُستخدم فقط لاكتشاف مواقع R موحّدة تُطبَّق على
+    كل الأقطاب المُدخَلة، بدل اكتشاف كل قطب مواقعه بمفرده — يحسّن الدقة
+    بشكل ملموس خصوصاً لقطب aVR (راجع توثيق classify_lead_signal). يُشترط
+    أن تكون إشارة Lead II بنفس معدل عينات وطول أقطاب المريض المُدخَلة
+    (نفس جلسة التسجيل).
+
+    lead_weights: قاموس اختياري لتخصيص أوزان الأقطاب (افتراضياً
+    DEFAULT_LEAD_WEIGHTS المبنية على Macro-F1 الموثّق لكل قطب).
+    """
+    external_r_locs = None
+    if reference_lead_signal is not None:
+        ref_raw, ref_fs = reference_lead_signal
+        ref_clean = remove_baseline(denoise(ref_raw, ref_fs), degree=6)
+        external_r_locs = detect_r_peaks(ref_clean, ref_fs, polarity_robust=True)
+
+    per_lead_results = {}
+    for lead, (raw, fs) in signals_by_lead.items():
+        if lead not in SUPPORTED_LEADS:
+            continue
+        per_lead_results[lead] = classify_lead_signal(raw, fs, lead, external_r_locs=external_r_locs)
+
+    result = combine_lead_probabilities(per_lead_results, lead_weights)
+    if "error" not in result:
+        result["reference_lead_alignment_used"] = reference_lead_signal is not None
+    return result
 
 
 def classify_from_image(image_path: str, lead: str) -> dict:

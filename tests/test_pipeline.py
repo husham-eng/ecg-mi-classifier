@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 import pytest
 
-from ecg_pipeline import classify_lead_signal, classify_patient, SUPPORTED_LEADS
+from ecg_pipeline import classify_lead_signal, classify_patient, combine_lead_probabilities, SUPPORTED_LEADS
 
 
 def synthetic_ecg(fs=500, duration_s=6, amp=1.0, seed=0):
@@ -69,10 +69,30 @@ def test_classify_patient_weighted_fusion():
     assert result["lead_weights_used"]["V2"] == max(result["lead_weights_used"].values())
 
 
+def test_combine_lead_probabilities_used_by_multiple_sources():
+    """
+    يتأكد أن combine_lead_probabilities تدمج بشكل صحيح نتائج أتت من مصادر
+    مختلفة (هنا: محاكاة نتائج قادمة من صور، عبر classify_lead_signal على
+    إشارات تركيبية مختلفة لكل قطب) — هذا يغطي إصلاح ثغرة كانت تمنع دمج
+    عدة صور مرفوعة في /classify (كانت تُرجع خطأً بدل قرار نهائي مدمج).
+    """
+    per_lead_results = {}
+    for i, lead in enumerate(SUPPORTED_LEADS):
+        sig = synthetic_ecg(duration_s=8, seed=i)
+        per_lead_results[lead] = classify_lead_signal(sig, fs=500.0, lead=lead)
+
+    result = combine_lead_probabilities(per_lead_results)
+    assert "error" not in result
+    assert result["n_leads_used"] == len(SUPPORTED_LEADS)
+    assert sum(result["combined_probabilities"].values()) == pytest.approx(1.0, abs=1e-3)
+    assert set(result["lead_weights_used"].keys()) == set(SUPPORTED_LEADS)
+
+
 if __name__ == "__main__":
     for lead in SUPPORTED_LEADS:
         test_model_loads_and_predicts(lead)
         test_multi_beat_aggregation(lead)
         test_explicit_beat_index_still_works(lead)
     test_classify_patient_weighted_fusion()
+    test_combine_lead_probabilities_used_by_multiple_sources()
     print("✅ كل الاختبارات نجحت")
