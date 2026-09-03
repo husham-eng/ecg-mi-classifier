@@ -15,11 +15,17 @@ app.py — تطبيق الويب الرئيسي
 
 import os
 import io
+import json
+import uuid
 import base64
 import tempfile
+from functools import wraps
+from datetime import datetime, timezone
+
 import cv2
 import numpy as np
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, session, redirect, url_for, send_from_directory
+from werkzeug.utils import secure_filename
 
 from ecg_pipeline import (classify_patient, classify_from_image, classify_lead_signal,
                            combine_lead_probabilities, SUPPORTED_LEADS)
@@ -28,6 +34,18 @@ from translations import get_translation, DEFAULT_LANG
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20MB حد أقصى لكل طلب
+
+# ⚠️ لأمان حقيقي: اضبط هذين المتغيّرين كمتغيّرات بيئة على منصة النشر
+# (Render: تبويب Environment)، لا تعتمد على القيم الافتراضية بالإنتاج.
+app.secret_key = os.environ.get("SECRET_KEY", "dev-only-change-me-on-render")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme123")
+
+# ⚠️ تنبيه مهم: هذا المجلد على قرص مؤقت (Ephemeral) بمعظم منصات الاستضافة
+# المجانية (بما فيها Render Free) — يُمسَح بالكامل عند كل إعادة نشر أو
+# "نوم" الخادم لفترة طويلة. مناسب لمراجعة قصيرة المدى فقط، وليس أرشيفاً
+# دائماً، إلى أن يُضاف تخزين خارجي دائم (قاعدة بيانات/تخزين سحابي).
+LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 SIGNAL_EXTENSIONS = {".csv", ".txt"}
@@ -44,6 +62,29 @@ def load_signal_file(file_storage) -> np.ndarray:
         except ValueError:
             continue
     return np.array(values)
+
+
+def log_attempt(kind: str, raw_files: dict[str, tuple[bytes, str]], result: dict) -> str:
+    """
+    يحفظ محاولة (تصنيف أو اكتشاف لوحة) بمجلد logs/ لمراجعتها لاحقاً عبر
+    لوحة التحكم: الملفات المرفوعة كما هي + نتيجة المعالجة كـJSON + وقت
+    الطلب. راجع التنبيه أعلى الملف بخصوص ديمومة هذا التخزين.
+    """
+    timestamp = datetime.now(timezone.utc)
+    attempt_id = timestamp.strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
+    attempt_dir = os.path.join(LOGS_DIR, attempt_id)
+    os.makedirs(attempt_dir, exist_ok=True)
+
+    for field_name, (content, original_filename) in raw_files.items():
+        safe_name = secure_filename(f"{field_name}_{original_filename}") or f"{field_name}.bin"
+        with open(os.path.join(attempt_dir, safe_name), "wb") as f:
+            f.write(content)
+
+    meta = {"kind": kind, "timestamp": timestamp.isoformat(), "result": result}
+    with open(os.path.join(attempt_dir, "meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
+
+    return attempt_id
 
 
 @app.route("/", methods=["GET"])
@@ -69,14 +110,17 @@ def detect_panel():
     if ext not in IMAGE_EXTENSIONS:
         return jsonify({"error": f"صيغة ملف غير مدعومة لصورة اللوحة الكاملة: {ext}"}), 400
 
+    raw_bytes = file.read()
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        file.save(tmp.name)
+        tmp.write(raw_bytes)
         tmp_path = tmp.name
 
     try:
         detected = detect_panel_leads(tmp_path)
     except Exception as e:
-        return jsonify({"error": f"تعذّر اكتشاف اللوحة — تحقق من أنها صورة تخطيط قياسية واضحة. ({e})"}), 400
+        error_result = {"error": f"تعذّر اكتشاف اللوحة — تحقق من أنها صورة تخطيط قياسية واضحة. ({e})"}
+        log_attempt("detect_panel", {"panel_image": (raw_bytes, file.filename)}, error_result)
+        return jsonify(error_result), 400
     finally:
         os.unlink(tmp_path)
 
@@ -98,7 +142,14 @@ def detect_panel():
         }
 
     if not leads_out:
-        return jsonify({"error": "تعذّر اكتشاف أي قطب مدعوم بهذي الصورة."}), 400
+        error_result = {"error": "تعذّر اكتشاف أي قطب مدعوم بهذي الصورة."}
+        log_attempt("detect_panel", {"panel_image": (raw_bytes, file.filename)}, error_result)
+        return jsonify(error_result), 400
+
+    # نسجّل الصورة الأصلية + ملخّص الثقة لكل قطب (لا الصور المقصوصة base64،
+    # لتوفير المساحة — يمكن استنتاجها لاحقاً من الصورة الأصلية عند الحاجة).
+    log_summary = {"leads_confidence": {k: v["confidence"] for k, v in leads_out.items()}}
+    log_attempt("detect_panel", {"panel_image": (raw_bytes, file.filename)}, log_summary)
 
     return jsonify({"leads": leads_out})
 
@@ -107,6 +158,7 @@ def detect_panel():
 def classify():
     per_lead_results = {}
     errors = {}
+    raw_files_for_log = {}  # {field_name: (raw_bytes, original_filename)}
 
     # قطب Lead II اختياري: لو رُفع، يُستخدم فقط كمرجع محازاة موحّد لمواقع R
     # عبر الأقطاب المُدخَلة كإشارات رقمية (لا يُصنَّف بنفسه، ولا يُطبَّق
@@ -114,10 +166,13 @@ def classify():
     reference_lead_signal = None
     ref_file = request.files.get("file_II")
     if ref_file and ref_file.filename != "":
+        ref_raw_bytes = ref_file.read()
+        raw_files_for_log["II"] = (ref_raw_bytes, ref_file.filename)
         ref_ext = os.path.splitext(ref_file.filename)[1].lower()
         if ref_ext in SIGNAL_EXTENSIONS:
             ref_fs = float(request.form.get("fs_II", 500))
-            ref_raw = load_signal_file(ref_file)
+            ref_raw = np.array([float(x) for x in ref_raw_bytes.decode("utf-8", errors="ignore").splitlines()
+                                 if x.strip().replace(".", "", 1).replace("-", "", 1).isdigit()])
             if len(ref_raw) >= ref_fs:
                 reference_lead_signal = (ref_raw, ref_fs)
             else:
@@ -137,11 +192,13 @@ def classify():
         if not file or file.filename == "":
             continue
 
+        raw_bytes = file.read()
+        raw_files_for_log[lead] = (raw_bytes, file.filename)
         ext = os.path.splitext(file.filename)[1].lower()
 
         if ext in IMAGE_EXTENSIONS:
             with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-                file.save(tmp.name)
+                tmp.write(raw_bytes)
                 tmp_path = tmp.name
             try:
                 result = classify_from_image(tmp_path, lead)
@@ -154,7 +211,14 @@ def classify():
 
         elif ext in SIGNAL_EXTENSIONS:
             fs = float(request.form.get(f"fs_{lead}", 500))
-            raw = load_signal_file(file)
+            values = []
+            for line in raw_bytes.decode("utf-8", errors="ignore").splitlines():
+                cell = line.strip().split(",")[0].split("\t")[0]
+                try:
+                    values.append(float(cell))
+                except ValueError:
+                    continue
+            raw = np.array(values)
             if len(raw) < fs:  # أقل من ثانية واحدة من البيانات
                 errors[lead] = "الإشارة قصيرة جداً (أقل من ثانية واحدة)."
                 continue
@@ -167,7 +231,10 @@ def classify():
             errors[lead] = f"صيغة ملف غير مدعومة: {ext}"
 
     if not per_lead_results:
-        return jsonify({"error": "لم يتم رفع أي قطب صالح.", "details": errors}), 400
+        error_result = {"error": "لم يتم رفع أي قطب صالح.", "details": errors}
+        if raw_files_for_log:
+            log_attempt("classify", raw_files_for_log, error_result)
+        return jsonify(error_result), 400
 
     # دمج فعلي لكل الأقطاب المتوفرة (صور و/أو إشارات معاً) بتصويت مرجّح واحد،
     # بغض النظر عن نوع المصدر لكل قطب — هذا يصلح الفجوة التي كانت تمنع
@@ -176,7 +243,78 @@ def classify():
     if "error" not in result:
         result["reference_lead_alignment_used"] = reference_lead_signal is not None
     result["errors"] = errors
+
+    log_attempt("classify", raw_files_for_log, result)
     return jsonify(result)
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("is_admin"):
+            return redirect(url_for("admin_login"))
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["is_admin"] = True
+            return redirect(url_for("admin_dashboard"))
+        error = "كلمة المرور غير صحيحة."
+    return render_template("admin_login.html", error=error)
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("is_admin", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+@login_required
+def admin_dashboard():
+    attempts = []
+    if os.path.isdir(LOGS_DIR):
+        for attempt_id in sorted(os.listdir(LOGS_DIR), reverse=True):
+            attempt_dir = os.path.join(LOGS_DIR, attempt_id)
+            meta_path = os.path.join(attempt_dir, "meta.json")
+            if not os.path.isfile(meta_path):
+                continue
+            try:
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            files = sorted(fn for fn in os.listdir(attempt_dir) if fn != "meta.json")
+            image_files = [fn for fn in files if os.path.splitext(fn)[1].lower() in IMAGE_EXTENSIONS]
+            attempts.append({
+                "id": attempt_id,
+                "kind": meta.get("kind"),
+                "timestamp": meta.get("timestamp"),
+                "result": meta.get("result", {}),
+                "files": files,
+                "image_files": image_files,
+            })
+    return render_template("admin_dashboard.html", attempts=attempts, logs_dir=LOGS_DIR)
+
+
+@app.route("/admin/file/<attempt_id>/<filename>")
+@login_required
+def admin_file(attempt_id, filename):
+    # حماية من Path Traversal: نتحقق أن المعرّف والاسم موجودان حرفياً بقائمة
+    # مجلد logs/ الفعلية قبل تقديم أي ملف.
+    safe_attempt_id = secure_filename(attempt_id)
+    attempt_dir = os.path.join(LOGS_DIR, safe_attempt_id)
+    if not os.path.isdir(attempt_dir):
+        return "غير موجود", 404
+    safe_filename = secure_filename(filename)
+    if safe_filename not in os.listdir(attempt_dir):
+        return "غير موجود", 404
+    return send_from_directory(attempt_dir, safe_filename)
 
 
 @app.route("/health", methods=["GET"])
