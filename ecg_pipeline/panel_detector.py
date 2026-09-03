@@ -150,41 +150,106 @@ def _ocr_confirm(row_crop_bgr: np.ndarray, expected_label: str) -> str:
     return "confirmed" if similarity >= 0.6 else "weak"
 
 
-def detect_panel_leads(image_path: str) -> dict:
+def _detect_6x2_layout(img: np.ndarray) -> dict:
     """
-    نقطة الدخول الرئيسية: يأخذ مسار صورة لوحة ECG كاملة، ويُرجع قاموساً
-    {اسم القطب التقليدي: {"crop": مصفوفة BGR، "confidence": ...}} لكل
-    الأقطاب الـ12، مبنياً أساساً على الترتيب الهيكلي التقليدي مع تأكيد
-    OCR إضافي حيثما أمكن.
+    تخطيط '6 صفوف × عمودين زمنيين متتاليين' (كل صف: قطب طرفي ثم قطب صدري
+    بنفس الصف، بترتيب I..aVF يساراً وV1..V6 يميناً).
     """
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError("تعذّرت قراءة الصورة.")
-
     top, bottom, left, right = detect_grid_bounds(img)
     divider_x = detect_divider_x(img, top, bottom, left, right)
-
     row_h = (bottom - top) / 6
-    results = {}
 
+    results = {}
     for i in range(6):
         y1 = int(top + i * row_h)
         y2 = int(top + (i + 1) * row_h)
 
         left_name = LEFT_COLUMN_LEADS[i]
-        left_crop = img[y1:y2, left:divider_x]
         left_margin = img[y1:y2, left:left + 65]
         results[left_name] = {
-            "crop": left_crop,
+            "crop": img[y1:y2, left:divider_x],
             "confidence": _ocr_confirm(left_margin, left_name),
         }
 
         right_name = RIGHT_COLUMN_LEADS[i]
-        right_crop = img[y1:y2, divider_x:right]
         right_margin = img[y1:y2, divider_x:divider_x + 65]
         results[right_name] = {
-            "crop": right_crop,
+            "crop": img[y1:y2, divider_x:right],
             "confidence": _ocr_confirm(right_margin, right_name),
         }
 
     return results
+
+
+# ترتيب الأعمدة الأربعة بتخطيط 3×4 القياسي (الأشهر عالمياً): كل عمود
+# يحوي 3 أقطاب رأسياً بهذا الترتيب الثابت.
+_3X4_COLUMN_LEADS = [
+    ["I", "II", "III"],
+    ["aVR", "aVL", "aVF"],
+    ["V1", "V2", "V3"],
+    ["V4", "V5", "V6"],
+]
+
+# نسبة تقديرية لارتفاع الشبكة الرئيسية (3×4) من إجمالي ارتفاع منطقة
+# المحتوى المكتشفة، لاستبعاد أي أشرطة إيقاع (Rhythm Strip) تالية أسفل
+# اللوحة الرئيسية (شائعة بهذا التخطيط، غير مطلوبة للتصنيف الحالي).
+_3X4_MAIN_GRID_HEIGHT_RATIO = 0.65
+
+
+def _detect_3x4_layout(img: np.ndarray) -> dict:
+    """
+    تخطيط '3 صفوف × 4 أعمدة' القياسي (الأشهر عالمياً): كل عمود يحوي 3
+    أقطاب مرصوصة رأسياً (I/II/III، ثم aVR/aVL/aVF، ثم V1/V2/V3، ثم
+    V4/V5/V6)، غالباً متبوعاً بشريط/شريطي إيقاع بأسفل اللوحة (نتجاهلهما).
+    """
+    top, bottom, left, right = detect_grid_bounds(img)
+    total_h = bottom - top
+    main_bottom = top + int(total_h * _3X4_MAIN_GRID_HEIGHT_RATIO)
+
+    row_h = (main_bottom - top) / 3
+    col_w = (right - left) / 4
+
+    results = {}
+    for col_idx, col_leads in enumerate(_3X4_COLUMN_LEADS):
+        x1 = int(left + col_idx * col_w)
+        x2 = int(left + (col_idx + 1) * col_w)
+        for row_idx, lead_name in enumerate(col_leads):
+            y1 = int(top + row_idx * row_h)
+            y2 = int(top + (row_idx + 1) * row_h)
+            margin = img[y1:y2, x1:x1 + min(50, int(col_w * 0.3))]
+            results[lead_name] = {
+                "crop": img[y1:y2, x1:x2],
+                "confidence": _ocr_confirm(margin, lead_name),
+            }
+
+    return results
+
+
+def _count_confirmed(layout_result: dict) -> int:
+    return sum(1 for info in layout_result.values() if info["confidence"] == "confirmed")
+
+
+def detect_panel_leads(image_path: str) -> dict:
+    """
+    نقطة الدخول الرئيسية: يأخذ مسار صورة لوحة ECG كاملة، ويُرجع قاموساً
+    {اسم القطب التقليدي: {"crop": مصفوفة BGR، "confidence": ...}} لكل
+    الأقطاب الـ12.
+
+    يجرّب تخطيطين شائعين (6×2 متتالٍ، و3×4 القياسي الأشهر عالمياً)،
+    ويختار التخطيط الذي يحصل على تأكيدات OCR أكثر (مؤشر عملي على أي
+    افتراض هيكلي يطابق الصورة الفعلية فعلاً) — لأن لا وسيلة أخرى مضمونة
+    لمعرفة تخطيط الصورة دون قراءة تسمياتها الفعلية أولاً.
+
+    ⚠️ لا يزال هذا لا يغطي كل التخطيطات الممكنة (توجد تخطيطات أخرى أقل
+    شيوعاً)؛ خطوة التأكيد البصرية بالواجهة ضرورية دائماً مهما كان التخطيط.
+    """
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError("تعذّرت قراءة الصورة.")
+
+    layout_6x2 = _detect_6x2_layout(img)
+    layout_3x4 = _detect_3x4_layout(img)
+
+    if _count_confirmed(layout_3x4) > _count_confirmed(layout_6x2):
+        return layout_3x4
+    return layout_6x2
