@@ -29,7 +29,7 @@ from translations import get_translation, DEFAULT_LANG
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20MB حد أقصى لكل طلب
 
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 SIGNAL_EXTENSIONS = {".csv", ".txt"}
 
 

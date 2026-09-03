@@ -79,7 +79,7 @@
     <p>{{ t.panel_section_desc | safe }}</p>
 
     <label>{{ t.panel_file_label }}</label>
-    <input type="file" id="panelImageInput" accept="image/png,image/jpeg,image/jpg" capture="environment">
+    <input type="file" id="panelImageInput" accept="image/png,image/jpeg,image/jpg,image/webp" capture="environment">
     <button type="button" id="detectPanelBtn">{{ t.panel_detect_button }}</button>
 
     <div id="panelDetectStatus" style="display:none; margin-top:10px; font-size:14px;"></div>
@@ -111,7 +111,7 @@
       <div class="lead-box">
         <h3>{{ t.lead_box_title.format(lead=lead) }}</h3>
         <label>{{ t.file_label }}</label>
-        <input type="file" name="file_{{ lead }}" accept=".csv,.txt,image/png,image/jpeg,image/jpg" capture="environment">
+        <input type="file" name="file_{{ lead }}" accept=".csv,.txt,image/png,image/jpeg,image/jpg,image/webp" capture="environment">
         <label>{{ t.fs_label }}</label>
         <input type="number" name="fs_{{ lead }}" value="500">
         <p class="hint">{{ t.fs_hint }}</p>
