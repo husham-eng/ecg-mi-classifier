@@ -6,82 +6,82 @@
   <title>{{ t.page_title }}</title>
   <style>
     :root {
-      --text: #3a3a3a;
-      --text-muted: #8a8a8a;
-      --border: #e4e4e4;
-      --bg-soft: #fafafa;
-      --accent: #5b7a99;      /* لون واحد هادئ للتفاعل، لا يُستخدم بإسراف */
-      --accent-hover: #4a6580;
-      --warn-bg: #fff9ec;
-      --warn-border: #f0dca0;
-      --warn-text: #7a6118;
+      --text: #333333;
+      --text-muted: #777777;
+      --border: #dedede;
+      --bg-soft: #f8f8f8;
+      --accent: #4a6d8c;      /* لون واحد هادئ للتفاعل، لا يُستخدم بإسراف */
+      --accent-hover: #3a5770;
+      --warn-bg: #fff8e8;
+      --warn-border: #ecd591;
+      --warn-text: #6b5414;
     }
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
       max-width: 980px; margin: 24px auto; padding: 0 18px;
-      color: var(--text); font-size: 13px; line-height: 1.55;
+      color: var(--text); font-size: 16px; line-height: 1.6;
     }
-    h1 { font-size: 17px; font-weight: 600; color: var(--text); margin: 0; }
-    h2 { font-size: 14px; font-weight: 600; color: var(--text); margin: 0 0 6px 0; }
-    h3 { font-size: 13px; font-weight: 600; color: #555; margin: 0 0 6px 0; }
+    h1 { font-size: 22px; font-weight: 600; color: var(--text); margin: 0; }
+    h2 { font-size: 18px; font-weight: 600; color: var(--text); margin: 0 0 8px 0; }
+    h3 { font-size: 16px; font-weight: 600; color: #555; margin: 0 0 8px 0; }
 
-    .top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .lang-switcher { font-size: 12px; color: var(--text-muted); }
-    .lang-switcher a { margin-inline-start: 4px; color: var(--text-muted); text-decoration: none; padding: 2px 7px; border-radius: 4px; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+    .lang-switcher { font-size: 14px; color: var(--text-muted); }
+    .lang-switcher a { margin-inline-start: 6px; color: var(--text-muted); text-decoration: none; padding: 3px 9px; border-radius: 5px; }
     .lang-switcher a.active { background: #eee; color: var(--text); font-weight: 600; }
 
     /* التحذير الطبي هو الشيء الوحيد اللي نبيه يلفت الانتباه فعلياً */
     .disclaimer {
       background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
-      padding: 9px 12px; border-radius: 6px; margin-bottom: 14px; font-size: 12.5px;
+      padding: 12px 16px; border-radius: 7px; margin-bottom: 18px; font-size: 15px;
     }
 
-    details.howto { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 7px; padding: 10px 14px; margin-bottom: 16px; }
-    details.howto summary { cursor: pointer; font-weight: 500; color: #555; font-size: 12.5px; }
-    details.howto ul, details.howto ol { margin: 6px 0; padding-inline-start: 20px; }
-    details.howto p { margin: 7px 0; font-size: 12.5px; line-height: 1.6; color: #555; }
+    details.howto { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+    details.howto summary { cursor: pointer; font-weight: 600; color: #555; font-size: 15px; }
+    details.howto ul, details.howto ol { margin: 8px 0; padding-inline-start: 24px; }
+    details.howto p { margin: 9px 0; font-size: 15px; line-height: 1.65; color: #555; }
 
-    .intro-text { font-size: 12.5px; line-height: 1.6; color: #666; }
-    .hint { color: var(--text-muted); font-size: 11.5px; }
+    .intro-text { font-size: 15px; line-height: 1.65; color: #666; }
+    .hint { color: var(--text-muted); font-size: 13.5px; }
 
-    .lead-box { border: 1px solid var(--border); border-radius: 7px; padding: 12px; margin-bottom: 10px; background: white; }
-    label { display: block; margin: 5px 0 2px; font-size: 12px; color: #666; font-weight: 400; }
+    .lead-box { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; background: white; }
+    label { display: block; margin: 7px 0 3px; font-size: 14px; color: #666; font-weight: 400; }
     input[type=file], input[type=number] {
-      width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid var(--border);
-      border-radius: 5px; font-size: 12.5px; color: var(--text); background: white;
+      width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 14.5px; color: var(--text); background: white;
     }
 
     button {
-      background: var(--accent); color: white; border: none; padding: 8px 18px;
-      font-size: 13px; font-weight: 500; border-radius: 6px; cursor: pointer; margin-top: 8px;
+      background: var(--accent); color: white; border: none; padding: 10px 22px;
+      font-size: 15px; font-weight: 500; border-radius: 7px; cursor: pointer; margin-top: 10px;
     }
     button:hover { background: var(--accent-hover); }
     button:disabled { background: #ccc; cursor: not-allowed; }
 
     #result {
-      margin-top: 18px; padding: 14px; border-radius: 7px; background: var(--bg-soft);
+      margin-top: 20px; padding: 16px; border-radius: 8px; background: var(--bg-soft);
       border: 1px solid var(--border); white-space: pre-wrap; font-family: ui-monospace, monospace;
-      font-size: 12px; color: #444;
+      font-size: 13.5px; color: #444;
     }
 
-    .leads-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .leads-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 12px; }
     .leads-grid .lead-box { margin-bottom: 0; }
 
     /* قسم الرفع السريع: حدود هادئة بدل الأخضر الصارخ، مع لمسة لون خفيفة فقط بالعنوان */
-    .panel-section { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 18px; }
+    .panel-section { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 9px; padding: 16px 18px; margin-bottom: 20px; }
     .panel-section h2 { color: var(--accent-hover); }
-    .panel-section p { font-size: 12.5px; line-height: 1.6; color: #666; }
+    .panel-section p { font-size: 15px; line-height: 1.65; color: #666; }
 
-    .detected-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 12px 0; }
-    .detected-card { border: 1px solid var(--border); border-radius: 7px; padding: 7px; background: white; text-align: center; }
-    .detected-card img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px; }
-    .detected-card h4 { margin: 5px 0 2px 0; font-size: 12px; font-weight: 600; color: #555; }
-    .confidence-badge { font-size: 11px; display: block; margin-top: 3px; }
+    .detected-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 14px 0; }
+    .detected-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: white; text-align: center; }
+    .detected-card img { max-width: 100%; border: 1px solid var(--border); border-radius: 5px; }
+    .detected-card h4 { margin: 6px 0 3px 0; font-size: 14px; font-weight: 600; color: #555; }
+    .confidence-badge { font-size: 13px; display: block; margin-top: 4px; }
     .confidence-confirmed { color: #5c8a5f; }
     .confidence-weak, .confidence-not_found { color: #b08a3e; }
 
-    .section-divider { text-align: center; color: #bbb; font-size: 12px; margin: 22px 0; }
+    .section-divider { text-align: center; color: #aaa; font-size: 14px; margin: 24px 0; }
   </style>
 </head>
 <body>
@@ -111,7 +111,7 @@
     <input type="file" id="panelImageInput" accept="image/png,image/jpeg,image/jpg,image/webp" capture="environment">
     <button type="button" id="detectPanelBtn">{{ t.panel_detect_button }}</button>
 
-    <div id="panelDetectStatus" style="display:none; margin-top:8px; font-size:12.5px; color:#777;"></div>
+    <div id="panelDetectStatus" style="display:none; margin-top:10px; font-size:15px; color:#777;"></div>
 
     <div id="detectedLeadsContainer" style="display:none;">
       <p class="hint">{{ t.panel_review_note }}</p>
